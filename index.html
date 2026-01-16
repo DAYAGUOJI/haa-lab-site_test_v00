@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human After All | Lab Interface</title>
+    <style>
+        /* --- 1. 全局设置 & 变量 --- */
+        :root {
+            --bg-color: #f5f5f5; 
+            --text-color: #000000;
+            --border-color: #000000;
+            --logo-width: 280px; 
+            
+            /* 动画特定变量 */
+            --anim-size: 80px;  
+            --anim-gap: 3px;    
+            --heart-color: #D32F2F;
+            --water-color: #000000;
+            --anchor-hover-y: -6px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.4;
+            overflow-x: hidden;
+        }
+
+        .mono {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        /* --- 2. 布局网格 --- */
+        .grid-container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            min-height: 100vh;
+        }
+
+        /* --- 3. 左侧侧边栏 --- */
+        .sidebar {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            border-right: 1px solid var(--border-color);
+            padding: 40px 60px 40px 40px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            /* 关键修复：确保侧边栏不会裁剪飞出的粒子 */
+            overflow: visible; 
+            z-index: 10;
+        }
+
+        /* LOGO 区域 */
+        .brand-identity {
+            width: var(--logo-width);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .brand-identity img.static-logo {
+            width: 200px;
+            height: auto;
+            display: block;
+        }
+
+        /* --- 4. 老虎机动画核心样式 --- */
+        
+        .anim-logo-container {
+            position: relative;
+            padding: 10px 0; 
+            /* 确保容器本身不裁剪溢出 */
+            overflow: visible;
+        }
+
+        .haa-logo {
+            display: flex;
+            gap: var(--anim-gap);
+            position: relative;
+            margin: 0 auto;
+        }
+
+        /* 上下遮罩 */
+        .haa-logo::before, .haa-logo::after {
+            content: "";
+            position: absolute;
+            left: 0; right: 0;
+            height: 25%; 
+            z-index: 10; 
+            pointer-events: none;
+        }
+        .haa-logo::before { top: 0; background: linear-gradient(to bottom, var(--bg-color) 0%, transparent 100%); }
+        .haa-logo::after { bottom: 0; background: linear-gradient(to top, var(--bg-color) 0%, transparent 100%); }
+
+        .reel {
+            width: var(--anim-size);
+            height: var(--anim-size);
+            overflow: hidden; /* 默认隐藏，滚动时保持整洁 */
+            position: relative;
+            z-index: 5; 
+        }
+        
+        /* 关键：当激活 pop-out 类时，允许溢出（实现凌驾于 Frame 之上） */
+        .reel.pop-out {
+            overflow: visible !important; 
+            z-index: 20; /* 提升层级，高于遮罩和其他元素 */
+        }
+
+        .reel.pop-out .strip .icon-box { opacity: 0; transition: opacity 0s; }
+        .reel.pop-out .strip .icon-box.active-overlay { opacity: 1; }
+
+        .strip {
+            display: flex;
+            flex-direction: column;
+            will-change: transform;
+        }
+
+        .icon-box {
+            width: var(--anim-size);
+            height: var(--anim-size);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .icon-box svg {
+            width: 70%; 
+            height: 70%;
+            fill: var(--text-color);
+            transition: fill 0.3s ease;
+            transform-origin: center center;
+            overflow: visible !important; 
+        }
+
+        /* --- 5. 动画特效 --- */
+        .blur-spin { filter: blur(2px); animation: infinite-spin 0.4s linear infinite; }
+        @keyframes infinite-spin { 0% { transform: translateY(0); } 100% { transform: translateY(-33.33%); } }
+
+        /* 粒子系统 */
+        .particle-wrapper {
+            position: absolute;
+            /* 极高的层级，确保在一切之上 */
+            z-index: 9999; 
+            opacity: 0;
+            pointer-events: none;
+            transform: translateZ(1px); 
+            animation: fly-x 0.4s linear forwards;
+        }
+        .particle-inner { width: 100%; height: 100%; animation: fly-y 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        .p-crumb .particle-inner { width: 0; height: 0; border-left: 2px solid transparent; border-right: 2px solid transparent; border-bottom: 4px solid var(--text-color); }
+        .p-water .particle-inner { background-color: var(--water-color); border-radius: 50%; }
+        
+        @keyframes fly-x { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(var(--tx)); opacity: 0; } }
+        @keyframes fly-y { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(var(--ty)) scale(0.5); } }
+
+        /* 交互特效 */
+        .anchor-hover-high svg { transform: translateY(var(--anchor-hover-y)) !important; }
+        .anchor-drop svg { animation: high-drop 0.2s cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+        @keyframes high-drop { 0% { transform: translateY(var(--anchor-hover-y)); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
+
+        .hammer-action svg { transform-origin: 80% 80%; animation: hammer-smash 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        @keyframes hammer-smash { 0% { transform: rotate(0deg); } 40% { transform: rotate(60deg); } 100% { transform: rotate(0deg); } }
+
+        .heartbeat svg { fill: var(--heart-color) !important; animation: heart-pulse 1.2s infinite ease-in-out; }
+        @keyframes heart-pulse { 0% { transform: scale(1); } 15% { transform: scale(1.25); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } 60% { transform: scale(1); } 100% { transform: scale(1); } }
+
+        .bite-mark { position: absolute; background-color: var(--bg-color); border-radius: 50%; width: 32%; height: 32%; opacity: 0; z-index: 10; }
+        .bite-1 { top: 25%; right: 1%; } .bite-2 { top: 50%; right: -3%; }   
+        .bite-anim { animation: bite-snap 0.05s linear forwards; }
+        @keyframes bite-snap { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
+        .eye-cover { transform: scale(0); transform-origin: center; transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1); }
+        .alien-action .eye-cover { transform: scale(1) !important; }
+
+        .v-shape { fill: none; stroke: var(--text-color); stroke-width: 2px; stroke-dasharray: 400; stroke-dashoffset: 400; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+        .v-circle { transform-origin: center; transform: rotate(-135deg); }
+        .draw-circle .v-circle { animation: draw-stroke 1.6s linear forwards; }
+        .draw-square .v-rect { animation: draw-stroke 1.6s linear forwards; }
+        @keyframes draw-stroke { to { stroke-dashoffset: 0; } }
+
+        /* --- 6. 右侧内容 & 响应式 --- */
+        .nav-links { list-style: none; margin-top: 60px; }
+        .nav-links li { margin-bottom: 15px; }
+        .nav-links a { text-decoration: none; color: var(--text-color); font-weight: 700; font-size: 1.2rem; display: inline-block; position: relative; }
+        .nav-links a::after { content: ''; position: absolute; width: 0; height: 2px; bottom: -2px; left: 0; background-color: var(--text-color); transition: width 0.3s ease; }
+        .nav-links a:hover::after { width: 100%; }
+        .sidebar-footer { opacity: 0.5; }
+
+        .content { padding: 40px 60px; }
+        header.hero { margin-bottom: 100px; padding-top: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 60px; }
+        h1.headline { font-size: 5rem; font-weight: 700; line-height: 0.9; letter-spacing: -0.02em; text-transform: uppercase; margin-bottom: 20px; }
+        .sub-headline { font-size: 1.5rem; max-width: 600px; font-weight: 300; }
+        .section-title { font-size: 0.8rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 30px; display: flex; justify-content: space-between; }
+        .projects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-bottom: 100px; }
+        .project-card { cursor: pointer; }
+        .placeholder-rect { width: 100%; aspect-ratio: 4 / 3; background-color: #e6e6e6; position: relative; overflow: hidden; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid transparent; }
+        .project-card:hover .placeholder-rect { background-color: #d9d9d9; transform: translateY(-5px); border-color: #000; }
+        .placeholder-rect svg { width: 100%; height: 100%; stroke: #fff; stroke-width: 1; position: absolute; top:0; left:0; }
+        .project-info { margin-top: 15px; display: flex; justify-content: space-between; align-items: baseline; }
+        .project-title { font-weight: 700; font-size: 1.1rem; }
+
+        @media (max-width: 900px) {
+            .grid-container { grid-template-columns: 1fr; }
+            .sidebar { height: auto; border-right: none; border-bottom: 1px solid var(--border-color); flex-direction: row; align-items: center; padding: 20px; z-index: 100; }
+            :root { --logo-width: 200px; }
+            .nav-links { display: none; }
+            .headline { font-size: 3rem; }
+            .content { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="grid-container">
+        <aside class="sidebar">
+            <div class="brand-identity">
+                <img src="../assets/logo/HAAlogo.svg" alt="HAA Text Logo" class="static-logo">
+                
+                <div class="anim-logo-container">
+                    <div class="haa-logo">
+                        <div class="reel"><div class="strip" id="strip-0"></div></div>
+                        <div class="reel"><div class="strip" id="strip-1"></div></div>
+                        <div class="reel"><div class="strip" id="strip-2"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <nav>
+                <ul class="nav-links">
+                    <li><a href="#">RESEARCH</a></li>
+                    <li><a href="#">PUBLICATIONS</a></li>
+                    <li><a href="#">TEAM</a></li>
+                    <li><a href="#">CONTACT</a></li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer mono">
+                EST. 2026<br>
+                TONGJI D&I<br>
+                SHANGHAI
+            </div>
+        </aside>
+
+        <main class="content">
+            <header class="hero">
+                <div class="mono" style="margin-bottom: 10px;">Lab Mission Statement</div>
+                <h1 class="headline">Human<br>After All.</h1>
+                <p class="sub-headline">
+                    Exploring the intersection of social robotics, generative agents, and human-centric design.
+                </p>
+            </header>
+
+            <section>
+                <div class="section-title mono">
+                    <span>SELECTED WORKS</span>
+                    <span>2025 — 2026</span>
+                </div>
+
+                <div class="projects-grid">
+                    <article class="project-card">
+                        <div class="placeholder-rect">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/><line x1="100" y1="0" x2="0" y2="100" vector-effect="non-scaling-stroke"/></svg>
+                        </div>
+                        <div class="project-info">
+                            <span class="project-title">Alien Eye Tuner</span>
+                            <span class="mono">HRI / VISION</span>
+                        </div>
+                    </article>
+                    <article class="project-card">
+                        <div class="placeholder-rect">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/><line x1="100" y1="0" x2="0" y2="100" vector-effect="non-scaling-stroke"/></svg>
+                        </div>
+                        <div class="project-info">
+                            <span class="project-title">Geometry of Emotion</span>
+                            <span class="mono">DATA VIZ</span>
+                        </div>
+                    </article>
+                    <article class="project-card">
+                        <div class="placeholder-rect">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/><line x1="100" y1="0" x2="0" y2="100" vector-effect="non-scaling-stroke"/></svg>
+                        </div>
+                        <div class="project-info">
+                            <span class="project-title">HAA Visual Identity</span>
+                            <span class="mono">BRANDING</span>
+                        </div>
+                    </article>
+                     <article class="project-card">
+                        <div class="placeholder-rect">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="100" vector-effect="non-scaling-stroke"/><line x1="100" y1="0" x2="0" y2="100" vector-effect="non-scaling-stroke"/></svg>
+                        </div>
+                        <div class="project-info">
+                            <span class="project-title">Robotic Empathy</span>
+                            <span class="mono">HARDWARE</span>
+                        </div>
+                    </article>
+                </div>
+            </section>
+            
+            <footer style="margin-top: 100px; padding-top: 40px; border-top: 1px solid #000;">
+                <div class="mono" style="display: flex; justify-content: space-between;">
+                    <span>&copy; 2026 HUMAN AFTER ALL LAB</span>
+                    <span>DESIGNED IN SHANGHAI</span>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        // 检测是否在本地文件系统运行，并给出警告
+        if (window.location.protocol === 'file:') {
+            alert('错误：检测到您直接打开了 HTML 文件。\n\n浏览器安全策略禁止直接读取本地 SVG 文件。请使用 VS Code 的 "Live Server" 插件打开此页面，否则图标将无法显示。');
+        }
+
+        const WAIT_TIME = 3500;
+        const SPIN_DURATION_BASE = 1000; 
+        const SPIN_DELAY = 400; 
+        const START_DELAY = 150;
+
+        const H_ICONS_FILES = ['hammer', 'happy', 'heart', 'helmet1', 'helmet2', 'home', 'human'];
+        const A_ICONS_FILES = ['airplane', 'alien', 'anchor', 'apple', 'arch', 'arrow', 'astronaut'];
+        
+        // 路径配置：假设 index.html 在 web 文件夹中，assets 在上一级
+        // 如果你的 Live Server 根目录是 web，这里的 ../assets 将会报错 404
+        // 请确保在 VS Code 中打开的是包含 web 和 assets 的父文件夹
+        const ASSETS_PATH = './assets/icons';
+
+        async function loadIcons(fileList, folder) {
+            const loaded = [];
+            for (let name of fileList) {
+                try {
+                    const response = await fetch(`${ASSETS_PATH}/${folder}/${name}.svg`);
+                    if (!response.ok) throw new Error(`Status ${response.status}`);
+                    let content = await response.text();
+
+                    // 注入 SVG 特效
+                    if (name === 'alien') {
+                        const eyeCovers = `<circle class="eye-cover left-eye" cx="29.5%" cy="60.5%" r="18%" fill="white" transform="scale(0)" /><circle class="eye-cover right-eye" cx="70.5%" cy="60.5%" r="18%" fill="white" transform="scale(0)" />`;
+                        content = content.replace('</svg>', `${eyeCovers}</svg>`);
+                    }
+                    if (name === 'human') {
+                        const vShapes = `<circle class="v-shape v-circle" cx="50%" cy="50.5%" r="55%" /><rect class="v-shape v-rect" x="2%" y="8%" width="100.5%" height="92%" />`;
+                        content = content.replace('</svg>', `${vShapes}</svg>`);
+                    }
+                    loaded.push({ name: name, content: content });
+                } catch (e) {
+                    console.error(`无法加载图标: ${name}.svg`, e);
+                    // 调试用的回退显示（如果加载失败，显示名字）
+                    loaded.push({ name: name, content: `<svg viewBox="0 0 100 100"><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="20">${name}</text></svg>` });
+                }
+            }
+            return loaded;
+        }
+
+        async function init() {
+            const hIcons = await loadIcons(H_ICONS_FILES, 'h_reel');
+            const aIcons = await loadIcons(A_ICONS_FILES, 'a_reel');
+
+            const hRenderList = [...hIcons, ...hIcons, ...hIcons];
+            const aRenderList = [...aIcons, ...aIcons, ...aIcons];
+
+            const fillStrip = (id, list) => {
+                const strip = document.getElementById(id);
+                strip.innerHTML = list.map(icon => 
+                    `<div class="icon-box" data-name="${icon.name}">${icon.content}</div>`
+                ).join('');
+            };
+
+            const reelCounts = [hIcons.length, aIcons.length, aIcons.length];
+
+            fillStrip('strip-0', hRenderList);
+            fillStrip('strip-1', aRenderList);
+            fillStrip('strip-2', aRenderList);
+
+            runAnimationLoop(reelCounts);
+        }
+
+        async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        function spawnParticles(container, startX, startY, type, dirY, spreadX = 15) {
+            let count = (type === 'water') ? (20 + Math.floor(Math.random() * 10)) : (3 + Math.floor(Math.random() * 3));
+            for (let k = 0; k < count; k++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = `particle-wrapper p-${type}`;
+                const inner = document.createElement('div');
+                inner.className = 'particle-inner';
+                wrapper.appendChild(inner);
+
+                const safeY = type === 'water' ? (60 + Math.random() * 30) : (startY + (Math.random()-0.5)*5);
+                wrapper.style.top = safeY + '%';
+                wrapper.style.left = (startX + (Math.random()-0.5)*10) + '%'; 
+                
+                let tx, ty;
+                if (type === 'water') {
+                    const angle = (Math.random() - 0.5) * 2.5; 
+                    tx = angle * spreadX * 1.3; 
+                    ty = -(11 + Math.random() * 4); 
+                    const size = 2 + Math.random() * 5; 
+                    wrapper.style.width = size + 'px';
+                    wrapper.style.height = size + 'px';
+                } else {
+                    tx = (Math.random() - 0.5) * spreadX * 2;
+                    ty = (10 + Math.random() * 20) * dirY;
+                }
+                
+                wrapper.style.setProperty('--tx', `${tx}px`);
+                wrapper.style.setProperty('--ty', `${ty}px`);
+                container.appendChild(wrapper);
+            }
+        }
+
+        async function runAnimationLoop(originalCounts) {
+            const strips = [
+                document.getElementById('strip-0'),
+                document.getElementById('strip-1'),
+                document.getElementById('strip-2')
+            ];
+            const iconHeight = document.querySelector('.icon-box').offsetHeight || 80;
+
+            while (true) {
+                for (let i = 0; i < 3; i++) {
+                    const strip = strips[i];
+                    strip.parentElement.classList.remove('pop-out');
+                    const icons = strip.querySelectorAll('.icon-box');
+                    icons.forEach(el => {
+                        el.classList.remove('heartbeat', 'hammer-action', 'alien-action', 'anchor-drop', 'anchor-hover-high', 'active-overlay', 'draw-circle', 'draw-square');
+                        el.querySelectorAll('.bite-mark, .particle-wrapper').forEach(n => n.remove());
+                        el.style.opacity = ''; 
+                    });
+                    strip.style.transition = 'none';
+                    strip.style.transform = 'translateY(0)';
+                    strip.classList.add('blur-spin');
+                    await sleep(START_DELAY);
+                }
+                await sleep(SPIN_DURATION_BASE);
+
+                for (let i = 0; i < 3; i++) {
+                    const strip = strips[i];
+                    const count = originalCounts[i];
+                    const targetIndex = Math.floor(Math.random() * count); 
+                    const finalPos = -(targetIndex + count) * iconHeight;
+
+                    const targetEl = strip.children[targetIndex + count];
+                    const name = targetEl.getAttribute('data-name');
+                    const parentReel = strip.parentElement;
+
+                    strip.classList.remove('blur-spin');
+                    strip.style.transition = 'transform 0.6s cubic-bezier(0.15, 1, 0.3, 1)';
+                    strip.style.transform = `translateY(${finalPos}px)`;
+
+                    // 溢出控制：打破边框的逻辑
+                    if (['anchor', 'hammer', 'human', 'heart'].some(n => name.includes(n))) {
+                        targetEl.classList.add('active-overlay'); 
+                        parentReel.classList.add('pop-out');      
+                    }
+                    
+                    if (name.includes('anchor')) targetEl.classList.add('anchor-hover-high');
+
+                    if (name.includes('anchor')) {
+                        setTimeout(() => {
+                            targetEl.classList.remove('anchor-hover-high');
+                            targetEl.classList.add('anchor-drop');
+                            setTimeout(() => spawnParticles(targetEl, 50, 90, 'water', -1, 40), 200);
+                        }, 600); 
+                    }
+                    if (name.includes('heart')) setTimeout(() => targetEl.classList.add('heartbeat'), 600);
+                    if (name.includes('hammer')) {
+                        setTimeout(() => {
+                            targetEl.classList.add('hammer-action');
+                            setTimeout(() => spawnParticles(targetEl, 92, 45, 'crumb', 1, 30), 150);
+                        }, 600);
+                    }
+                    if (name.includes('apple')) {
+                        setTimeout(() => {
+                            const b1 = document.createElement('div'); b1.className = 'bite-mark bite-1 bite-anim'; targetEl.appendChild(b1);
+                            spawnParticles(targetEl, 75, 25, 'crumb', -1); 
+                            setTimeout(() => {
+                                const b2 = document.createElement('div'); b2.className = 'bite-mark bite-2 bite-anim'; targetEl.appendChild(b2);
+                                spawnParticles(targetEl, 78, 50, 'crumb', 1);
+                            }, 250); 
+                        }, 600);
+                    }
+                    if (name.includes('alien')) {
+                        const totalTimeLeft = ((3 - i) * SPIN_DELAY) + WAIT_TIME;
+                        setTimeout(() => targetEl.classList.add('alien-action'), totalTimeLeft - 100);
+                    }
+                    if (name.includes('human')) {
+                        setTimeout(() => {
+                            targetEl.classList.add('draw-square');
+                            setTimeout(() => targetEl.classList.add('draw-circle'), 1600);
+                        }, 600);
+                    }
+                    await sleep(SPIN_DELAY);
+                }
+                await sleep(WAIT_TIME);
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
